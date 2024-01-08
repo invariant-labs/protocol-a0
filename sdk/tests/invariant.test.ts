@@ -80,10 +80,6 @@ describe('invariant', async () => {
   })
 
   it('should get tick and check if it is initialized', async () => {
-    if (!token0.contract?.address || !token1.contract?.address || !invariant.contract?.address) {
-      throw new Error()
-    }
-
     const feeTier = newFeeTier({ v: 10000000000n }, 1)
 
     await invariant.addFeeTier(account, feeTier)
@@ -148,10 +144,6 @@ describe('invariant', async () => {
     assert.deepEqual(isUpperTickInitialized, true)
   })
   it('create pool', async () => {
-    if (!token0.contract?.address || !token1.contract?.address || !invariant.contract?.address) {
-      throw new Error()
-    }
-
     const feeTier = newFeeTier({ v: 10000000000n }, 1)
     await invariant.addFeeTier(account, feeTier)
     const addedFeeTierExists = await invariant.feeTierExist(account, feeTier)
@@ -190,9 +182,6 @@ describe('invariant', async () => {
     })
   })
   it('create pool x/y and y/x', async () => {
-    if (!token0.contract?.address || !token1.contract?.address || !invariant.contract?.address) {
-      throw new Error()
-    }
     const feeTier = newFeeTier({ v: 10000000000n }, 1)
     await invariant.addFeeTier(account, feeTier)
     const addedFeeTierExists = await invariant.feeTierExist(account, feeTier)

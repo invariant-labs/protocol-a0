@@ -10,6 +10,7 @@ import { Invariant } from './invariant.js'
 import { Network } from './network.js'
 import { PSP22 } from './psp22.js'
 import { InvariantTx, Query, Tx } from './schema.js'
+import { WrappedAZERO } from './wrapped_azero.js'
 
 export const DEFAULT_REF_TIME = 100000000000
 export const DEFAULT_PROOF_SIZE = 100000000000
@@ -156,18 +157,7 @@ export const deployInvariant = async (
   account: IKeyringPair,
   initFee: Percentage
 ): Promise<Invariant> => {
-  const invariantData = await getDeploymentData('invariant')
-  const invariant = new Invariant(api, Network.Local)
-
-  const invariantDeploy = await invariant.deploy(
-    account,
-    invariantData.abi,
-    invariantData.wasm,
-    initFee
-  )
-  await invariant.load(invariantDeploy.address, invariantData.abi)
-
-  return invariant
+  return Invariant.create(api, account, initFee)
 }
 
 export const deployPSP22 = async (
@@ -177,22 +167,26 @@ export const deployPSP22 = async (
   name: string,
   symbol: string,
   decimals: bigint
-) => {
-  const tokenData = await getDeploymentData('psp22')
-  const token = new PSP22(api, Network.Local)
-
-  const tokenDeploy = await token.deploy(
+): Promise<PSP22> => {
+  return PSP22.create(
+    api,
+    null,
+    DEFAULT_REF_TIME,
+    DEFAULT_PROOF_SIZE,
     account,
-    tokenData.abi,
-    tokenData.wasm,
     supply,
     name,
     symbol,
     decimals
   )
-  await token.load(tokenDeploy.address, tokenData.abi)
+}
 
-  return token
+export const deployWrappedAZERO = async (
+  api: ApiPromise,
+  account: IKeyringPair,
+  network: Network
+): Promise<WrappedAZERO> => {
+  return WrappedAZERO.create(api, account, network)
 }
 
 export const convertObj = <T>(obj: T): T => {

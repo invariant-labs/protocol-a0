@@ -9,7 +9,7 @@ import { InvariantError, Percentage } from 'math'
 import { Invariant } from './invariant.js'
 import { Network } from './network.js'
 import { PSP22 } from './psp22.js'
-import { InvariantTx, Query, Tx } from './schema.js'
+import { InvariantTx, Query, Tx, TxResult } from './schema.js'
 
 export const DEFAULT_REF_TIME = 100000000000
 export const DEFAULT_PROOF_SIZE = 100000000000
@@ -119,7 +119,7 @@ export async function sendTx(
   data: any[],
   waitForFinalization: boolean = true,
   block: boolean = true
-): Promise<string> {
+): Promise<TxResult> {
   if (!contract) {
     throw new Error('contract not loaded')
   }
@@ -133,19 +133,31 @@ export async function sendTx(
     ...data
   )
 
-  return new Promise<string>(async (resolve, reject) => {
+  return new Promise<TxResult>(async (resolve, reject) => {
     await call.signAndSend(signer, result => {
       if (!block) {
-        resolve(result.txHash.toHex())
+        resolve({
+          hash: result.txHash.toHex(),
+          events: parseEvents((result as any).contractEvents || [])
+        })
       }
+
       if (result.isError || result.dispatchError) {
         reject(new Error(message))
       }
+
       if (result.isCompleted && !waitForFinalization) {
-        resolve(result.txHash.toHex())
+        resolve({
+          hash: result.txHash.toHex(),
+          events: parseEvents((result as any).contractEvents || [])
+        })
       }
+
       if (result.isFinalized) {
-        resolve(result.txHash.toHex())
+        resolve({
+          hash: result.txHash.toHex(),
+          events: parseEvents((result as any).contractEvents || [])
+        })
       }
     })
   })
@@ -201,20 +213,26 @@ export const convertObj = <T>(obj: T): T => {
   Object.entries(obj as { [key: string]: any }).forEach(([key, value]) => {
     newObj[key] = value
 
-    if (typeof value === 'number' || (typeof value === 'string' && value.startsWith('0x'))) {
+    if (
+      typeof value === 'number' ||
+      (typeof value === 'string' && (value.startsWith('0x') || /^[0-9]+$/.test(value)))
+    ) {
       newObj[key] = BigInt(value)
     }
 
-    if (typeof value.v === 'number' || (typeof value.v === 'string' && value.v.startsWith('0x'))) {
+    if (
+      typeof value.v === 'number' ||
+      (typeof value.v === 'string' && (value.v.startsWith('0x') || /^[0-9]+$/.test(value.v)))
+    ) {
       newObj[key] = { v: BigInt(value.v) }
-    }
-
-    if (typeof value === 'object' && value.v === undefined) {
-      newObj[key] = convertObj(value)
     }
 
     if (value.constructor === Array) {
       newObj[key] = convertArr(value)
+    }
+
+    if (typeof value === 'object' && value.v === undefined) {
+      newObj[key] = convertObj(value)
     }
   })
 
@@ -223,20 +241,26 @@ export const convertObj = <T>(obj: T): T => {
 
 export const convertArr = (arr: any[]): any[] => {
   return arr.map(value => {
-    if (typeof value === 'number' || (typeof value === 'string' && value.startsWith('0x'))) {
+    if (
+      typeof value === 'number' ||
+      (typeof value === 'string' && (value.startsWith('0x') || /^[0-9]+$/.test(value)))
+    ) {
       return BigInt(value)
     }
 
-    if (typeof value.v === 'number' || (typeof value.v === 'string' && value.v.startsWith('0x'))) {
+    if (
+      typeof value.v === 'number' ||
+      (typeof value.v === 'string' && (value.v.startsWith('0x') || /^[0-9]+$/.test(value.v)))
+    ) {
       return { v: BigInt(value.v) }
-    }
-
-    if (typeof value === 'object' && value.v === undefined) {
-      return convertObj(value)
     }
 
     if (value.constructor === Array) {
       return convertArr(value)
+    }
+
+    if (typeof value === 'object' && value.v === undefined) {
+      return convertObj(value)
     }
 
     return value
@@ -259,4 +283,18 @@ export const assertThrowsAsync = async (fn: Promise<any>, word?: InvariantError 
     return
   }
   throw new Error('Function did not throw error')
+}
+
+export const parseEvent = (event: { [key: string]: any }) => {
+  const eventObj: { [key: string]: any } = {}
+
+  for (let i = 0; i < event.args.length; i++) {
+    eventObj[event.event.args[i].name] = event.args[i].toPrimitive()
+  }
+
+  return convertObj(eventObj)
+}
+
+export const parseEvents = (events: { [key: string]: any }[]) => {
+  return events.map(event => parseEvent(event))
 }

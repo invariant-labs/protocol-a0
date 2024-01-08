@@ -1,5 +1,8 @@
+/* eslint camelcase: off */
+
 import { ApiPromise } from '@polkadot/api'
-import { ContractPromise } from '@polkadot/api-contract'
+import { Abi, ContractPromise } from '@polkadot/api-contract'
+import { Bytes } from '@polkadot/types'
 import { WeightV2 } from '@polkadot/types/interfaces'
 import { IKeyringPair } from '@polkadot/types/types/interfaces'
 import { DeployedContract } from '@scio-labs/use-inkathon'
@@ -19,12 +22,13 @@ import {
   TokenAmount
 } from 'math/math.js'
 import { Network } from './network.js'
-import { InvariantQuery, InvariantTx } from './schema.js'
+import { Event, InvariantQuery, InvariantTx, TxResult } from './schema.js'
 import {
   DEFAULT_PROOF_SIZE,
   DEFAULT_REF_TIME,
   convertArr,
   convertObj,
+  parseEvent,
   sendQuery,
   sendTx
 } from './utils.js'
@@ -35,6 +39,8 @@ export class Invariant {
   gasLimit: WeightV2
   storageDepositLimit: number | null
   waitForFinalization: boolean
+  abi: Abi | null = null
+  eventListeners: { identifier: Event; listener: (event: any) => void }[] = []
 
   constructor(
     api: ApiPromise,
@@ -63,6 +69,48 @@ export class Invariant {
 
   async load(deploymentAddress: string, abi: any): Promise<void> {
     this.contract = new ContractPromise(this.api, abi, deploymentAddress)
+    this.abi = new Abi(abi)
+
+    this.api.query.system.events((events: any) => {
+      events.forEach((record: any) => {
+        const { event } = record
+
+        if (!this.api.events.contracts.ContractEmitted.is(event)) {
+          return
+        }
+
+        const [account_id, contract_evt] = event.data
+
+        if (account_id.toString() !== this.contract?.address.toString()) {
+          return
+        }
+
+        const decoded = this.abi?.decodeEvent(contract_evt as Bytes)
+
+        if (!decoded) {
+          return
+        }
+
+        const eventObj = parseEvent(decoded)
+
+        this.eventListeners.map(eventListener => {
+          if (eventListener.identifier === decoded.event.identifier) {
+            eventListener.listener(eventObj)
+          }
+        })
+      })
+    })
+  }
+
+  on(identifier: Event, listener: (event: any) => void): void {
+    this.eventListeners.push({ identifier, listener })
+  }
+
+  off(identifier: Event, listener: (event: any) => void): void {
+    this.eventListeners = this.eventListeners.filter(
+      eventListener =>
+        eventListener.identifier !== identifier || eventListener.listener !== listener
+    )
   }
 
   async getProtocolFee(account: IKeyringPair): Promise<Percentage> {
@@ -80,7 +128,7 @@ export class Invariant {
     account: IKeyringPair,
     fee: Percentage,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -98,7 +146,7 @@ export class Invariant {
     account: IKeyringPair,
     feeTier: FeeTier,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -116,7 +164,7 @@ export class Invariant {
     account: IKeyringPair,
     feeTier: FeeTier,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -159,7 +207,7 @@ export class Invariant {
     poolKey: PoolKey,
     feeReceiver: string,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -177,7 +225,7 @@ export class Invariant {
     account: IKeyringPair,
     poolKey: PoolKey,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -230,7 +278,7 @@ export class Invariant {
     slippageLimitLower: SqrtPrice,
     slippageLimitUpper: SqrtPrice,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -249,7 +297,7 @@ export class Invariant {
     index: bigint,
     receiver: string,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -267,7 +315,7 @@ export class Invariant {
     account: IKeyringPair,
     index: bigint,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -281,7 +329,7 @@ export class Invariant {
     )
   }
 
-  async claimFee(account: IKeyringPair, index: bigint, block: boolean = true): Promise<string> {
+  async claimFee(account: IKeyringPair, index: bigint, block: boolean = true): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -366,7 +414,7 @@ export class Invariant {
     initSqrtPrice: SqrtPrice,
     initTick: bigint,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -425,7 +473,7 @@ export class Invariant {
     byAmountIn: boolean,
     sqrtPriceLimit: SqrtPrice,
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,
@@ -446,7 +494,7 @@ export class Invariant {
     slippage: Percentage,
     swaps: SwapHop[],
     block: boolean = true
-  ): Promise<string> {
+  ): Promise<TxResult> {
     return sendTx(
       this.contract,
       this.gasLimit,

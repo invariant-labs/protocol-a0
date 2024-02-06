@@ -1,14 +1,13 @@
 use crate::{
     contracts::{FeeTier, LiquidityTick, Pool, PoolKey, Position, PositionTick, Tick},
     invariant::{CalculateSwapResult, QuoteResult, SwapHop},
-    math::{
-        liquidity::Liquidity, percentage::Percentage, sqrt_price::SqrtPrice,
-        token_amount::TokenAmount,
-    },
     InvariantError,
 };
 use alloc::vec::Vec;
 use ink::primitives::AccountId;
+use math::{
+    liquidity::Liquidity, percentage::Percentage, sqrt_price::SqrtPrice, token_amount::TokenAmount,
+};
 
 #[ink::trait_definition]
 pub trait InvariantTrait {

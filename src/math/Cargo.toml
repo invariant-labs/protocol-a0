@@ -1,0 +1,37 @@
+[package]
+name = "math"
+version = "0.1.0"
+authors = ["Invariant Labs"]
+edition = "2021"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+wasm-bindgen = {version = "0.2.89", optional = true}
+serde = { version = "1.0", features = ["derive"], optional = true}
+serde-wasm-bindgen = { version ="0.6.3",  optional = true}
+tsify ={ version = "0.4.5",  optional = true}
+paste = { version = "1.0.14",  optional = true}
+js-sys = { version = "0.3.66", optional = true}
+
+decimal = { path= "../decimal" }
+traceable_result = { path = "../traceable_result" }
+wasm_wrapper = { path = "../wasm_wrapper"}
+
+# ink
+ink = { version = "4.3", default-features = false}
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
+    "derive",
+]}
+scale-info = { version = "2.9", default-features = false, features = [
+    "derive",
+], optional = true }
+
+
+[features]
+default = ["std"]
+std = ["ink/std", "scale/std", "scale-info/std"]
+contract = []
+ink-as-dependency = []
+wasm = ["wasm-bindgen","serde", "serde-wasm-bindgen", "tsify", "paste", "js-sys"]

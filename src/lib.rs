@@ -3,7 +3,6 @@
 extern crate alloc;
 mod contracts;
 pub mod e2e;
-pub mod math;
 
 #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
 #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -43,21 +42,20 @@ pub mod invariant {
         PositionTick, Positions, Tick, Tickmap, Ticks, CHUNK_SIZE, LIQUIDITY_TICK_LIMIT,
         MAX_TICKMAP_QUERY_SIZE, POSITION_TICK_LIMIT,
     };
-    use crate::math::calculate_min_amount_out;
-    use crate::math::check_tick;
-    use crate::math::log::get_tick_at_sqrt_price;
-    use crate::math::percentage::Percentage;
-    use crate::math::sqrt_price::get_max_tick;
-    use crate::math::sqrt_price::SqrtPrice;
-    use crate::math::token_amount::TokenAmount;
-    use crate::math::types::liquidity::Liquidity;
-
-    use crate::math::{compute_swap_step, MAX_SQRT_PRICE, MIN_SQRT_PRICE};
     use crate::InvariantError;
     use decimal::*;
     use ink::contract_ref;
     use ink::prelude::vec;
     use ink::prelude::vec::Vec;
+    use math::calculate_min_amount_out;
+    use math::check_tick;
+    use math::log::get_tick_at_sqrt_price;
+    use math::percentage::Percentage;
+    use math::sqrt_price::get_max_tick;
+    use math::sqrt_price::SqrtPrice;
+    use math::token_amount::TokenAmount;
+    use math::types::liquidity::Liquidity;
+    use math::{compute_swap_step, MAX_SQRT_PRICE, MIN_SQRT_PRICE};
     use token::PSP22;
     use traceable_result::unwrap;
 
@@ -165,6 +163,9 @@ pub mod invariant {
                 ..Self::default()
             }
         }
+
+        #[ink(message)]
+        pub fn test(&self) {}
 
         fn create_tick(&mut self, pool_key: PoolKey, index: i32) -> Result<Tick, InvariantError> {
             let current_timestamp = self.env().block_timestamp();
@@ -1118,9 +1119,9 @@ pub mod invariant {
 
         use super::*;
 
-        use crate::math::consts::MAX_TICK;
-        use crate::math::percentage::Percentage;
-        use crate::math::sqrt_price::calculate_sqrt_price;
+        use math::consts::MAX_TICK;
+        use math::percentage::Percentage;
+        use math::sqrt_price::calculate_sqrt_price;
 
         #[ink::test]
         fn initialize_works() {

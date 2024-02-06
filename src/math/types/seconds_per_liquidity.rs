@@ -1,15 +1,29 @@
+#[allow(unused_imports)]
+use crate::alloc::string::ToString;
+use crate::liquidity::Liquidity;
+use core::convert::{TryFrom, TryInto};
 use decimal::*;
+#[cfg(feature = "wasm")]
+use serde::{Deserialize, Serialize};
 use traceable_result::*;
-
-use crate::math::types::liquidity::Liquidity;
+#[cfg(feature = "wasm")]
+use tsify::Tsify;
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 #[decimal(24)]
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, scale::Decode, scale::Encode)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
+#[cfg_attr(not(feature = "wasm"), derive(scale::Encode, scale::Decode))]
 #[cfg_attr(
     feature = "std",
     derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
 )]
-pub struct SecondsPerLiquidity(pub u128);
+#[cfg_attr(
+    feature = "wasm",
+    derive(Serialize, Deserialize, Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+pub struct SecondsPerLiquidity(#[cfg_attr(feature = "wasm", tsify(type = "bigint"))] pub u128);
 
 impl SecondsPerLiquidity {
     pub fn unchecked_add(self, other: SecondsPerLiquidity) -> SecondsPerLiquidity {
@@ -77,7 +91,7 @@ pub mod tests {
 
     use super::*;
 
-    use crate::math::types::seconds_per_liquidity::SecondsPerLiquidity;
+    use crate::types::seconds_per_liquidity::SecondsPerLiquidity;
     #[test]
     fn test_domain_calculate_seconds_per_liquidity_global() {
         // current_timestamp <= last_timestamp
@@ -153,7 +167,10 @@ pub mod tests {
             )
             .unwrap_err()
             .get();
-            assert_eq!(cause, "conversion to invariant::math::types::seconds_per_liquidity::SecondsPerLiquidity type failed");
+            assert_eq!(
+                cause,
+                "conversion to math::types::seconds_per_liquidity::SecondsPerLiquidity type failed"
+            );
             assert_eq!(stack.len(), 1);
         }
 

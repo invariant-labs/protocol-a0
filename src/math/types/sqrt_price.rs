@@ -1,16 +1,30 @@
+#[allow(unused_imports)]
+use crate::alloc::string::ToString;
+use crate::consts::*;
+use crate::types::{fixed_point::FixedPoint, token_amount::TokenAmount};
+use core::convert::{TryFrom, TryInto};
 use decimal::*;
+#[cfg(feature = "wasm")]
+use serde::{Deserialize, Serialize};
 use traceable_result::*;
-
-use crate::math::consts::*;
-use crate::math::types::{fixed_point::FixedPoint, token_amount::TokenAmount};
+#[cfg(feature = "wasm")]
+use tsify::Tsify;
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 #[decimal(24)]
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, scale::Decode, scale::Encode)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd)] //
+#[cfg_attr(not(feature = "wasm"), derive(scale::Encode, scale::Decode))]
 #[cfg_attr(
     feature = "std",
     derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
 )]
-pub struct SqrtPrice(pub u128);
+#[cfg_attr(
+    feature = "wasm",
+    derive(Serialize, Deserialize, Tsify),
+    tsify(into_wasm_abi, from_wasm_abi)
+)]
+pub struct SqrtPrice(#[cfg_attr(feature = "wasm", tsify(type = "bigint"))] pub u128);
 
 impl SqrtPrice {
     pub fn from_tick(i: i32) -> TrackableResult<Self> {

@@ -8,6 +8,10 @@ edition = "2021"
 # local
 decimal = { path = "src/decimal" }
 traceable_result = { path = "src/traceable_result" }
+math = { path = "src/math", default-features = false, features = ["ink-as-dependency"]}
+token = { path = "src/token", default-features = false, features = [
+  "ink-as-dependency",
+] }
 
 # ink
 ink = { version = "4.2.0", default-features = false }
@@ -17,9 +21,7 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 scale-info = { version = "2.6", default-features = false, features = [
   "derive",
 ], optional = true }
-token = { path = "src/token", default-features = false, features = [
-  "ink-as-dependency",
-] }
+
 
 [dev-dependencies]
 ink_e2e = "4.3.0"
@@ -31,7 +33,7 @@ path = "src/lib.rs"
 
 [features]
 default = ["std"]
-std = ["ink/std", "scale/std", "scale-info/std"]
+std = ["ink/std", "scale/std", "scale-info/std", "math/std"]
 ink-as-dependency = []
 e2e-tests = []
 

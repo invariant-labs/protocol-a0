@@ -7,7 +7,13 @@
   "description": "",
   "type": "module",
   "main": "target/src/index.js",
-  "keywords": ["Aleph Zero", "DEX", "SDK", "substrate", "ink"],
+  "keywords": [
+    "Aleph Zero",
+    "DEX",
+    "SDK",
+    "substrate",
+    "ink"
+  ],
   "license": "ISC",
   "repository": {
     "type": "git",
@@ -17,11 +23,11 @@
   "scripts": {
     "prebuild": "npm run contract:build && rm -rf target && cp ../target/ink/invariant.wasm ./contracts/invariant/ && cp ../target/ink/invariant.json ./contracts/invariant",
     "build": "npx tsc",
-    "start:testnet": "npx tsc && node --experimental-wasm-modules target/src/index.js testnet",
+    "start:testnet": "npx tsc && node --experimental-wasm-modules target/src/testnet-calls.js testnet",
     "start:local": "npx tsc && node --experimental-wasm-modules target/src/index.js local",
     "lint": "eslint . --ext .ts",
     "test": "ts-mocha",
-    "wasm:build": "cd ../wasm && wasm-pack build",    
+    "wasm:build": "cd ../wasm && wasm-pack build",
     "wasm:package": "cd ../wasm && jq '. + {\"type\": \"module\"}' pkg/package.json > temp && mv temp pkg/package.json",
     "node:start": "substrate-contracts-node purge-chain -y && substrate-contracts-node --rpc-port 9944 --dev",
     "node:stop": "ps aux | grep substrate-contracts-node | tr -s ' ' | cut -d ' ' -f 2 | head -n 1 | xargs -r kill -9",

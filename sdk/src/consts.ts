@@ -21,6 +21,10 @@ import {
 } from 'invariant-a0-wasm/invariant_a0_wasm.js'
 
 export const MAX_REF_TIME = 259058343000
+export const TESTNET_REF_TIME = 2755022842
+export const TESTNET_PROOF_SIZE = 56100
+// export const DEFAULT_REF_TIME = 1250000000000
+
 export const DEFAULT_REF_TIME = 1250000000000
 export const DEFAULT_PROOF_SIZE = 1250000000000
 

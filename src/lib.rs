@@ -990,49 +990,46 @@ pub mod invariant {
         }
 
         #[ink(message)]
-        fn get_tickmap(&self, pool_key: PoolKey, center_tick: i32) -> Vec<(u16, u64)> {
-            let tick_spacing = pool_key.fee_tier.tick_spacing;
+        fn get_initialized_chunks(&self, pool_key: PoolKey) -> Vec<u16> {
+            self.tickmap.get_initialized_chunks(pool_key)
+        }
 
-            let max_chunk_index = get_max_chunk(tick_spacing);
+        #[ink(message)]
+        fn get_tickmap(
+            &self,
+            pool_key: PoolKey,
+            current_tick_index: i32,
+            offset: u16,
+            amount: u32,
+        ) -> Vec<(u16, u64)> {
             let mut tickmap_slice: Vec<(u16, u64)> = vec![];
 
-            let (current_chunk_index, _) = tick_to_position(center_tick, tick_spacing);
-            let current_chunk = self
-                .tickmap
-                .bitmap
-                .get((current_chunk_index, pool_key))
-                .unwrap_or(0);
-            if current_chunk != 0 {
-                tickmap_slice.push((current_chunk_index, current_chunk));
-            }
+            let initialized_chunks = self.tickmap.get_initialized_chunks(pool_key);
 
-            for step in 1..=max_chunk_index {
-                for &offset in &[step as i16, -(step as i16)] {
-                    if tickmap_slice.len() == MAX_TICKMAP_QUERY_SIZE {
+            let (current_chunk, _) =
+                tick_to_position(current_tick_index, pool_key.fee_tier.tick_spacing);
+
+            let max_chunk = get_max_chunk(pool_key.fee_tier.tick_spacing);
+
+            let lower_bound = match current_chunk > offset {
+                true => current_chunk - offset,
+                false => 0u16,
+            };
+
+            let upper_bound = match current_chunk + offset < max_chunk {
+                true => current_chunk + offset,
+                false => max_chunk,
+            };
+
+            for &chunk_index in initialized_chunks.iter() {
+                if chunk_index >= lower_bound && chunk_index <= upper_bound {
+                    if tickmap_slice.len() == MAX_TICKMAP_QUERY_SIZE
+                        || tickmap_slice.len() == amount as usize
+                    {
                         return tickmap_slice;
                     }
-                    if (current_chunk_index as i16 + offset) < 0
-                        || (current_chunk_index as i16 + offset) > max_chunk_index as i16
-                    {
-                        continue;
-                    }
-
-                    let target_index = (current_chunk_index as i16 + offset) as u16;
-
-                    if target_index <= max_chunk_index {
-                        let chunk = self
-                            .tickmap
-                            .bitmap
-                            .get((target_index, pool_key))
-                            .unwrap_or(0);
-                        if chunk != 0 {
-                            if offset > 0 {
-                                tickmap_slice.push((target_index, chunk));
-                            } else {
-                                tickmap_slice.insert(0, (target_index, chunk));
-                            }
-                        }
-                    }
+                    let chunk = self.tickmap.bitmap.get((chunk_index, pool_key)).unwrap();
+                    tickmap_slice.push((chunk_index, chunk));
                 }
             }
 

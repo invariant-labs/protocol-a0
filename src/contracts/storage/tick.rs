@@ -6,11 +6,9 @@ use crate::math::types::{
 use decimal::*;
 use traceable_result::*;
 
-#[derive(Debug, Copy, Clone, scale::Decode, scale::Encode, PartialEq)]
-#[cfg_attr(
-    feature = "std",
-    derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
-)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
 pub struct Tick {
     pub index: i32,
     pub sign: bool,
@@ -30,11 +28,9 @@ pub const LIQUIDITY_TICK_LIMIT: usize = MAX_RESULT_SIZE / (32 + 128 + 8);
 // 131072 / (32 + 128 + 128 + 64) > 372
 pub const POSITION_TICK_LIMIT: usize = MAX_RESULT_SIZE / (32 + 128 + 128 + 64);
 
-#[derive(Debug, Copy, Clone, scale::Decode, scale::Encode, PartialEq)]
-#[cfg_attr(
-    feature = "std",
-    derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
-)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
 pub struct PositionTick {
     pub index: i32,
     pub fee_growth_outside_x: FeeGrowth,
@@ -42,11 +38,9 @@ pub struct PositionTick {
     pub seconds_outside: u64,
 }
 
-#[derive(Debug, Copy, Clone, scale::Decode, scale::Encode, PartialEq)]
-#[cfg_attr(
-    feature = "std",
-    derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
-)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
 pub struct LiquidityTick {
     pub index: i32,
     pub liquidity_change: Liquidity,
@@ -85,7 +79,7 @@ impl Tick {
                 false => FeeGrowth::new(0),
             },
             seconds_outside: match below_current_tick {
-                true => current_timestamp - pool.start_timestamp,
+                true => current_timestamp.checked_sub(pool.start_timestamp).unwrap(),
                 false => 0,
             },
             ..Self::default()
@@ -136,21 +130,35 @@ impl Tick {
             max_liquidity_per_tick,
         )?;
 
-        self.update_liquidity_change(liquidity_delta, is_deposit ^ is_upper);
+        let _ = self.update_liquidity_change(liquidity_delta, is_deposit ^ is_upper);
         Ok(())
     }
 
-    fn update_liquidity_change(&mut self, liquidity_delta: Liquidity, add: bool) {
+    fn update_liquidity_change(
+        &mut self,
+        liquidity_delta: Liquidity,
+        add: bool,
+    ) -> TrackableResult<()> {
         if self.sign ^ add {
             if { self.liquidity_change } > liquidity_delta {
-                self.liquidity_change -= liquidity_delta;
+                self.liquidity_change = self
+                    .liquidity_change
+                    .checked_sub(liquidity_delta)
+                    .map_err(|_| err!("Underflow while calculating liquidity change"))?;
             } else {
-                self.liquidity_change = liquidity_delta - self.liquidity_change;
+                self.liquidity_change = liquidity_delta
+                    .checked_sub(self.liquidity_change)
+                    .map_err(|_| err!("Underflow while calculating liquidity change"))?;
                 self.sign = !self.sign;
             }
         } else {
-            self.liquidity_change += liquidity_delta;
+            self.liquidity_change = self
+                .liquidity_change
+                .checked_add(liquidity_delta)
+                .map_err(|_| err!("Overflow while calculating liquidity change"))?;
         }
+
+        Ok(())
     }
 
     fn calculate_new_liquidity_gross(
@@ -369,7 +377,7 @@ mod tests {
             };
             let liquidity_delta = Liquidity::from_integer(3);
             let add = true;
-            tick.update_liquidity_change(liquidity_delta, add);
+            let _ = tick.update_liquidity_change(liquidity_delta, add);
 
             assert!(tick.sign);
             assert_eq!({ tick.liquidity_change }, Liquidity::from_integer(5));
@@ -382,7 +390,7 @@ mod tests {
             };
             let liquidity_delta = Liquidity::from_integer(3);
             let add = false;
-            tick.update_liquidity_change(liquidity_delta, add);
+            let _ = tick.update_liquidity_change(liquidity_delta, add);
 
             assert!(!tick.sign);
             assert_eq!({ tick.liquidity_change }, Liquidity::from_integer(5));
@@ -396,7 +404,7 @@ mod tests {
             };
             let liquidity_delta = Liquidity::from_integer(3);
             let add = false;
-            tick.update_liquidity_change(liquidity_delta, add);
+            let _ = tick.update_liquidity_change(liquidity_delta, add);
 
             assert!(!tick.sign);
             assert_eq!({ tick.liquidity_change }, Liquidity::from_integer(1));
@@ -409,7 +417,7 @@ mod tests {
             };
             let liquidity_delta = Liquidity::from_integer(3);
             let add = true;
-            tick.update_liquidity_change(liquidity_delta, add);
+            let _ = tick.update_liquidity_change(liquidity_delta, add);
 
             assert!(tick.sign);
             assert_eq!({ tick.liquidity_change }, Liquidity::from_integer(1));

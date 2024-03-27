@@ -2,47 +2,19 @@
 
 extern crate alloc;
 mod contracts;
+#[cfg(all(test, feature = "e2e-tests"))]
 pub mod e2e;
 pub mod math;
 
-#[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
-#[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-pub enum InvariantError {
-    NotAdmin,
-    NotFeeReceiver,
-    PoolAlreadyExist,
-    PoolNotFound,
-    TickAlreadyExist,
-    InvalidTickIndexOrTickSpacing,
-    PositionNotFound,
-    TickNotFound,
-    FeeTierNotFound,
-    PoolKeyNotFound,
-    AmountIsZero,
-    WrongLimit,
-    PriceLimitReached,
-    NoGainSwap,
-    InvalidTickSpacing,
-    FeeTierAlreadyExist,
-    PoolKeyAlreadyExist,
-    UnauthorizedFeeReceiver,
-    ZeroLiquidity,
-    TransferError,
-    TokensAreSame,
-    AmountUnderMinimumAmountOut,
-    InvalidFee,
-    NotEmptyTickDeinitialization,
-    InvalidInitTick,
-    InvalidInitSqrtPrice,
-    InvalidSize,
-}
 #[ink::contract]
 pub mod invariant {
     use crate::contracts::{
-        get_bit_at_position, get_max_chunk, position_to_tick, tick_to_position, FeeTier, FeeTiers,
+        get_bit_at_position, get_max_chunk, position_to_tick, tick_to_position,
+        CalculateSwapResult, CreatePositionEvent, CrossTickEvent, FeeTier, FeeTiers,
         InvariantConfig, InvariantTrait, LiquidityTick, Pool, PoolKey, PoolKeys, Pools, Position,
-        PositionTick, Positions, Tick, Tickmap, Ticks, CHUNK_SIZE, LIQUIDITY_TICK_LIMIT,
-        MAX_TICKMAP_QUERY_SIZE, POSITION_TICK_LIMIT,
+        PositionTick, Positions, QuoteResult, RemovePositionEvent, SwapEvent, SwapHop, Tick,
+        Tickmap, Ticks, CHUNK_SIZE, LIQUIDITY_TICK_LIMIT, MAX_TICKMAP_QUERY_SIZE,
+        POSITION_TICK_LIMIT,
     };
     use crate::math::calculate_min_amount_out;
     use crate::math::check_tick;
@@ -53,95 +25,14 @@ pub mod invariant {
     use crate::math::token_amount::TokenAmount;
     use crate::math::types::liquidity::Liquidity;
 
+    use crate::contracts::InvariantError;
     use crate::math::{compute_swap_step, MAX_SQRT_PRICE, MIN_SQRT_PRICE};
-    use crate::InvariantError;
     use decimal::*;
     use ink::contract_ref;
     use ink::prelude::vec;
     use ink::prelude::vec::Vec;
     use token::PSP22;
     use traceable_result::unwrap;
-
-    #[ink(event)]
-    pub struct CreatePositionEvent {
-        #[ink(topic)]
-        timestamp: u64,
-        address: AccountId,
-        pool: PoolKey,
-        liquidity: Liquidity,
-        lower_tick: i32,
-        upper_tick: i32,
-        current_sqrt_price: SqrtPrice,
-    }
-    #[ink(event)]
-    pub struct CrossTickEvent {
-        #[ink(topic)]
-        timestamp: u64,
-        address: AccountId,
-        pool: PoolKey,
-        indexes: Vec<i32>,
-    }
-
-    #[ink(event)]
-    pub struct RemovePositionEvent {
-        #[ink(topic)]
-        timestamp: u64,
-        address: AccountId,
-        pool: PoolKey,
-        liquidity: Liquidity,
-        lower_tick: i32,
-        upper_tick: i32,
-        current_sqrt_price: SqrtPrice,
-    }
-    #[ink(event)]
-    pub struct SwapEvent {
-        #[ink(topic)]
-        timestamp: u64,
-        address: AccountId,
-        pool: PoolKey,
-        amount_in: TokenAmount,
-        amount_out: TokenAmount,
-        fee: TokenAmount,
-        start_sqrt_price: SqrtPrice,
-        target_sqrt_price: SqrtPrice,
-        x_to_y: bool,
-    }
-
-    #[derive(scale::Decode, Default, scale::Encode, Clone, Debug, PartialEq)]
-    #[cfg_attr(
-        feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
-    )]
-    pub struct CalculateSwapResult {
-        pub amount_in: TokenAmount,
-        pub amount_out: TokenAmount,
-        pub start_sqrt_price: SqrtPrice,
-        pub target_sqrt_price: SqrtPrice,
-        pub fee: TokenAmount,
-        pub pool: Pool,
-        pub ticks: Vec<Tick>,
-    }
-    #[derive(Default, Debug, scale::Decode, scale::Encode)]
-    #[cfg_attr(
-        feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
-    )]
-    pub struct QuoteResult {
-        pub amount_in: TokenAmount,
-        pub amount_out: TokenAmount,
-        pub target_sqrt_price: SqrtPrice,
-        pub ticks: Vec<Tick>,
-    }
-
-    #[derive(scale::Decode, Default, scale::Encode, Clone, Debug)]
-    #[cfg_attr(
-        feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
-    )]
-    pub struct SwapHop {
-        pub pool_key: PoolKey,
-        pub x_to_y: bool,
-    }
 
     #[ink(storage)]
     #[derive(Default)]
@@ -242,18 +133,35 @@ pub mod invariant {
 
                 // make remaining amount smaller
                 if by_amount_in {
-                    remaining_amount -= result.amount_in + result.fee_amount;
+                    remaining_amount = remaining_amount
+                        .checked_sub(
+                            result
+                                .amount_in
+                                .checked_add(result.fee_amount)
+                                .map_err(|_| InvariantError::AddOverflow)?,
+                        )
+                        .map_err(|_| InvariantError::SubUnderflow)?;
                 } else {
-                    remaining_amount -= result.amount_out;
+                    remaining_amount = remaining_amount
+                        .checked_sub(result.amount_out)
+                        .map_err(|_| InvariantError::SubUnderflow)?;
                 }
 
                 unwrap!(pool.add_fee(result.fee_amount, x_to_y, self.config.protocol_fee));
-                event_fee_amount += result.fee_amount;
+                event_fee_amount = event_fee_amount
+                    .checked_add(result.fee_amount)
+                    .map_err(|_| InvariantError::AddOverflow)?;
 
                 pool.sqrt_price = result.next_sqrt_price;
 
-                total_amount_in += result.amount_in + result.fee_amount;
-                total_amount_out += result.amount_out;
+                total_amount_in = total_amount_in
+                    .checked_add(result.amount_in)
+                    .map_err(|_| InvariantError::AddOverflow)?
+                    .checked_add(result.fee_amount)
+                    .map_err(|_| InvariantError::AddOverflow)?;
+                total_amount_out = total_amount_out
+                    .checked_add(result.amount_out)
+                    .map_err(|_| InvariantError::AddOverflow)?;
 
                 // Fail if price would go over swap limit
                 if pool.sqrt_price == sqrt_price_limit && !remaining_amount.is_zero() {
@@ -276,7 +184,9 @@ pub mod invariant {
                             pool_key.fee_tier,
                         );
 
-                        total_amount_in += amount_to_add;
+                        total_amount_in = total_amount_in
+                            .checked_add(amount_to_add)
+                            .map_err(|_| InvariantError::AddOverflow)?;
                         if has_crossed {
                             ticks.push(tick);
                         }
@@ -357,20 +267,17 @@ pub mod invariant {
             x_to_y: bool,
         ) {
             let timestamp = self.get_timestamp();
-            ink::codegen::EmitEvent::<Invariant>::emit_event(
-                self.env(),
-                SwapEvent {
-                    timestamp,
-                    address,
-                    pool,
-                    amount_in,
-                    amount_out,
-                    fee,
-                    start_sqrt_price,
-                    target_sqrt_price,
-                    x_to_y,
-                },
-            );
+            self.env().emit_event(SwapEvent {
+                timestamp,
+                address,
+                pool,
+                amount_in,
+                amount_out,
+                fee,
+                start_sqrt_price,
+                target_sqrt_price,
+                x_to_y,
+            });
         }
 
         fn emit_create_position_event(
@@ -383,18 +290,15 @@ pub mod invariant {
             current_sqrt_price: SqrtPrice,
         ) {
             let timestamp = self.get_timestamp();
-            ink::codegen::EmitEvent::<Invariant>::emit_event(
-                self.env(),
-                CreatePositionEvent {
-                    timestamp,
-                    address,
-                    pool,
-                    liquidity,
-                    lower_tick,
-                    upper_tick,
-                    current_sqrt_price,
-                },
-            );
+            self.env().emit_event(CreatePositionEvent {
+                timestamp,
+                address,
+                pool,
+                liquidity,
+                lower_tick,
+                upper_tick,
+                current_sqrt_price,
+            });
         }
 
         fn emit_remove_position_event(
@@ -407,31 +311,25 @@ pub mod invariant {
             current_sqrt_price: SqrtPrice,
         ) {
             let timestamp = self.get_timestamp();
-            ink::codegen::EmitEvent::<Invariant>::emit_event(
-                self.env(),
-                RemovePositionEvent {
-                    timestamp,
-                    address,
-                    pool,
-                    liquidity,
-                    lower_tick,
-                    upper_tick,
-                    current_sqrt_price,
-                },
-            );
+            self.env().emit_event(RemovePositionEvent {
+                timestamp,
+                address,
+                pool,
+                liquidity,
+                lower_tick,
+                upper_tick,
+                current_sqrt_price,
+            });
         }
 
         fn emit_cross_tick_event(&self, address: AccountId, pool: PoolKey, indexes: Vec<i32>) {
             let timestamp = self.get_timestamp();
-            ink::codegen::EmitEvent::<Invariant>::emit_event(
-                self.env(),
-                CrossTickEvent {
-                    timestamp,
-                    address,
-                    pool,
-                    indexes,
-                },
-            );
+            self.env().emit_event(CrossTickEvent {
+                timestamp,
+                address,
+                pool,
+                indexes,
+            });
         }
 
         fn get_timestamp(&self) -> u64 {
@@ -1007,17 +905,19 @@ pub mod invariant {
             }
 
             for step in 1..=max_chunk_index {
-                for &offset in &[step as i16, -(step as i16)] {
+                for &offset in &[step as i16, 0i16.checked_sub(step as i16).unwrap()] {
                     if tickmap_slice.len() == MAX_TICKMAP_QUERY_SIZE {
                         return tickmap_slice;
                     }
-                    if (current_chunk_index as i16 + offset) < 0
-                        || (current_chunk_index as i16 + offset) > max_chunk_index as i16
+                    if ((current_chunk_index as i16).checked_add(offset).unwrap()) < 0
+                        || ((current_chunk_index as i16).checked_add(offset).unwrap())
+                            > max_chunk_index as i16
                     {
                         continue;
                     }
 
-                    let target_index = (current_chunk_index as i16 + offset) as u16;
+                    let target_index =
+                        ((current_chunk_index as i16).checked_add(offset).unwrap()) as u16;
 
                     if target_index <= max_chunk_index {
                         let chunk = self
@@ -1062,7 +962,7 @@ pub mod invariant {
                     for bit in 0..=end {
                         if get_bit_at_position(chunk, bit) == 1 {
                             if skipped_ticks < offset {
-                                skipped_ticks += 1;
+                                skipped_ticks = skipped_ticks.checked_add(1).unwrap();
                                 continue;
                             }
 
@@ -1102,12 +1002,12 @@ pub mod invariant {
             let max_tick = get_max_tick(tick_spacing);
             let (chunk_limit, _) = tick_to_position(max_tick, tick_spacing);
 
-            let mut amount = 0;
+            let mut amount: u32 = 0;
 
             for i in 0..=chunk_limit {
                 let chunk = self.tickmap.bitmap.get((i, pool_key)).unwrap_or(0);
 
-                amount += chunk.count_ones();
+                amount = amount.checked_add(chunk.count_ones()).unwrap();
             }
 
             amount

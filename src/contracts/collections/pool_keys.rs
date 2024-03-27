@@ -1,4 +1,4 @@
-use crate::{contracts::PoolKey, InvariantError};
+use crate::contracts::{InvariantError, PoolKey};
 use alloc::vec::Vec;
 use ink::storage::Mapping;
 
@@ -28,7 +28,10 @@ impl PoolKeys {
         self.pool_keys.insert(pool_key, &self.pool_keys_length);
         self.pool_keys_by_index
             .insert(self.pool_keys_length, &pool_key);
-        self.pool_keys_length += 1;
+        self.pool_keys_length = self
+            .pool_keys_length
+            .checked_add(1)
+            .ok_or(InvariantError::AddOverflow)?;
 
         Ok(())
     }
@@ -38,7 +41,10 @@ impl PoolKeys {
         match self.get_index(pool_key) {
             Some(index) => {
                 self.pool_keys_by_index.remove(index);
-                self.pool_keys_length -= 1;
+                self.pool_keys_length = self
+                    .pool_keys_length
+                    .checked_sub(1)
+                    .ok_or(InvariantError::SubUnderflow)?;
                 self.pool_keys.remove(pool_key);
                 Ok(())
             }

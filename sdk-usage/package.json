@@ -13,13 +13,14 @@
     "create-pool": "npx tsc && node --experimental-wasm-modules target/create-pool.js",
     "query-tickmap": "npx tsc && node --experimental-wasm-modules target/query-tickmap.js",
     "swap": "npx tsc && node --experimental-wasm-modules target/swap.js",
-    "setup": "npx tsc && node --experimental-wasm-modules target/setup.js"
+    "setup": "npx tsc && node --experimental-wasm-modules target/setup.js",
+    "query-events": "npx tsc && node --experimental-wasm-modules target/query-events.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@invariant-labs/a0-sdk": "^0.2.8",
+    "@invariant-labs/a0-sdk": "^0.2.9",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
